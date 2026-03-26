@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str
 
-    # Anthropic
+    # AI
     openai_api_key: str
 
     # Agent personality
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     company_services: str = "Software development and consulting"
     agent_name: str = "Alex"
 
-    # Week 2+ integrations (optional for now)
+    # Integrations (optional)
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_whatsapp_number: str = ""
