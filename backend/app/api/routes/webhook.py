@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import Response
 import httpx
 from app.config import get_settings
@@ -19,7 +19,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     sender_name  = form_data.get("ProfileName", "Client")
 
     if not message_text:
-        return Response(content="<?xml version='1.0' encoding='UTF-8'?><Response></Response>", media_type="text/xml")
+        return Response(content="", media_type="text/plain")
 
     client = await memory_service.get_or_create_client(db, phone=sender_phone, name=sender_name)
     conversation = await memory_service.get_or_create_conversation(db, client_id=client.id, channel="whatsapp")
@@ -30,25 +30,70 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     if not reply or not reply.strip():
         reply = "Hello! How can I assist you today?"
 
-    reply_safe = reply.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    twiml = f"""<?xml version='1.0' encoding='UTF-8'?>
-<Response>
-    <Message>{reply_safe}</Message>
-</Response>"""
-    return Response(content=twiml, media_type="text/xml")
+    return Response(content=reply, media_type="text/plain")
+
+processed_events: set = set()
 
 
+async def handle_slack_message(slack_user_id: str, message_text: str, channel_id: str):
+    from app.db.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            client = await memory_service.get_or_create_client(
+                db, slack_user_id=slack_user_id, name=f"Slack User {slack_user_id}",
+            )
+            conversation = await memory_service.get_or_create_conversation(
+                db, client_id=client.id, channel="slack"
+            )
+            history = await memory_service.get_history(db, conversation.id)
+            reply, action, _ = await ai_service.process_message(
+                message=message_text,
+                conversation_history=history,
+            )
+            await memory_service.save_messages(
+                db,
+                conversation_id=conversation.id,
+                user_message=message_text,
+                assistant_reply=reply,
+            )
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            print(f"ERROR Slack: {e}")
+            reply = "Sorry, I encountered an error. Please try again."
+
+    async with httpx.AsyncClient() as http_client:
+        await http_client.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={
+                "Authorization": f"Bearer {settings.slack_bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            json={"channel": channel_id, "text": reply},
+        )
 @router.post("/slack")
-async def slack_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
 
     if data.get("type") == "url_verification":
         return {"challenge": data.get("challenge")}
 
     event = data.get("event", {})
+    event_id = data.get("event_id", "")
 
-    if event.get("type") != "message" or event.get("bot_id"):
+    if (
+        event.get("type") != "message"
+        or event.get("bot_id")
+        or event.get("subtype")
+    ):
         return {"ok": True}
+
+    # Duplicate check
+    if event_id in processed_events:
+        return {"ok": True}
+    processed_events.add(event_id)
+    if len(processed_events) > 1000:
+        processed_events.clear()
 
     slack_user_id = event.get("user")
     message_text  = event.get("text", "").strip()
@@ -57,17 +102,8 @@ async def slack_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     if not message_text or not slack_user_id:
         return {"ok": True}
 
-    client = await memory_service.get_or_create_client(db, slack_user_id=slack_user_id, name=f"Slack User {slack_user_id}")
-    conversation = await memory_service.get_or_create_conversation(db, client_id=client.id, channel="slack")
-    history = await memory_service.get_history(db, conversation.id)
-    reply, action, _ = await ai_service.process_message(message=message_text, conversation_history=history)
-    await memory_service.save_messages(db, conversation_id=conversation.id, user_message=message_text, assistant_reply=reply)
-
-    async with httpx.AsyncClient() as http_client:
-        await http_client.post(
-            "https://slack.com/api/chat.postMessage",
-            headers={"Authorization": f"Bearer {settings.slack_bot_token}"},
-            json={"channel": channel_id, "text": reply},
-        )
+    background_tasks.add_task(
+        handle_slack_message, slack_user_id, message_text, channel_id
+    )
 
     return {"ok": True}
