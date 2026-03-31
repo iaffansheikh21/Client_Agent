@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_whatsapp_number: str = ""
     slack_bot_token: str = ""
-    jira_url: str = ""
-    jira_email: str = ""
-    jira_api_token: str = ""
+    trello_api_key: str = ""
+    trello_token: str = ""
+    trello_board_id: str = ""
+    trello_list_id: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 

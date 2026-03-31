@@ -26,6 +26,18 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     history = await memory_service.get_history(db, conversation.id)
     reply, action, _ = await ai_service.process_message(message=message_text, conversation_history=history)
     await memory_service.save_messages(db, conversation_id=conversation.id, user_message=message_text, assistant_reply=reply)
+    # Handle Trello task creation
+    if action.type == "create_task":
+        from app.services import trello_service
+        try:
+            await trello_service.create_card(
+                title=action.payload.get("title", "New Task"),
+                description=action.payload.get("description", ""),
+                priority=action.payload.get("priority", "medium"),
+                task_type=action.payload.get("task_type", "support"),
+            )
+        except Exception as e:
+            print(f"ERROR Trello: {e}")
 
     if not reply or not reply.strip():
         reply = "Hello! How can I assist you today?"
@@ -56,6 +68,18 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                 user_message=message_text,
                 assistant_reply=reply,
             )
+            # Handle Trello task creation
+            if action.type == "create_task":
+                from app.services import trello_service
+                try:
+                    await trello_service.create_card(
+                        title=action.payload.get("title", "New Task"),
+                        description=action.payload.get("description", ""),
+                        priority=action.payload.get("priority", "medium"),
+                        task_type=action.payload.get("task_type", "support"),
+                    )
+                except Exception as e:
+                    print(f"ERROR Trello: {e}")
             await db.commit()
         except Exception as e:
             await db.rollback()
