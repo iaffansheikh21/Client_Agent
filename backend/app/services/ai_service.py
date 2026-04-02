@@ -8,9 +8,10 @@ client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 def build_system_prompt() -> str:
-    return f"""You are {settings.agent_name}, a professional AI assistant for {settings.company_name}.
+    s = get_settings()
+    return f"""You are {s.agent_name}, a professional AI assistant for {s.company_name}.
 
-Our services include: {settings.company_services}
+Our services include: {s.company_services}
 
 Your responsibilities:
 1. Answer client queries about our services professionally and helpfully
@@ -20,7 +21,7 @@ Your responsibilities:
 
 Communication style:
 - Be professional but friendly
-- Keep responses concise (2-4 sentences max for simple queries)
+- Keep responses concise (3-5 sentences max for simple queries)
 - Always confirm before creating tasks or invoices
 
 When you need to take an action, use the provided tools.
@@ -31,8 +32,8 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "create_jira_task",
-            "description": "Create a Jira task when client reports a bug, requests a feature, or needs support work.",
+            "name": "create_trello_task",
+            "description": "Create a Trello task when client reports a bug, requests a feature, or needs support work.",
             "parameters": {
                 "type": "object",
                 "properties": {

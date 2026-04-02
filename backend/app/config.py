@@ -15,9 +15,15 @@ class Settings(BaseSettings):
     openai_api_key: str
 
     # Agent personality
-    company_name: str = "Our Company"
-    company_services: str = "Software development and consulting"
-    agent_name: str = "Alex"
+    company_name: str = "Digital Solutions"
+    company_services: str = (
+    "We provide end-to-end digital services including custom web development, "
+    "UI/UX and graphic design, SEO (search engine optimization), mobile app development "
+    "(Android & iOS), custom software development, domain and hosting solutions, "
+    "and digital marketing services such as social media marketing and paid advertising. "
+    "We help businesses build, grow, and scale their online presence with modern and scalable solutions."
+    )
+    agent_name: str = "DigiBot"
 
     # Integrations (optional)
     twilio_account_sid: str = ""
