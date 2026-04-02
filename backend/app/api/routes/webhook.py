@@ -66,6 +66,16 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                     },
                 )
                 print(f"✅ Escalation alert sent to #agent-alerts")
+                #Email Notification
+                from app.services import email_service
+                await email_service.send_escalation_email(
+                    client_name=sender_name,
+                    client_contact=sender_phone,
+                    channel="WhatsApp",
+                    reason=action.payload.get("reason", "Not specified"),
+                    urgency=action.payload.get("urgency", "low"),
+                    original_message=message_text,
+                )
         except Exception as e:
             print(f"ERROR Escalation alert: {e}")
     if not reply or not reply.strip():
@@ -137,6 +147,16 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                             },
                         )
                         print(f"✅ Escalation alert sent to #agent-alerts")
+                        #Email Notification
+                        from app.services import email_service
+                    await email_service.send_escalation_email(
+                    client_name=f"Slack User {slack_user_id}",
+                    client_contact=slack_user_id,
+                    channel="Slack",
+                    reason=action.payload.get("reason", "Not specified"),
+                    urgency=action.payload.get("urgency", "low"),
+                    original_message=message_text,
+                )
                 except Exception as e:
                     print(f"ERROR Escalation alert: {e}")    
             await db.commit()

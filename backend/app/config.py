@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     trello_list_id: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    resend_api_key: str = ""
+    alert_email: str = ""
 
     class Config:
         env_file = ".env"
