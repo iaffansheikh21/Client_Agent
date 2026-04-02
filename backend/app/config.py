@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_whatsapp_number: str = ""
     slack_bot_token: str = ""
+    slack_alert_channel: str = ""
     trello_api_key: str = ""
     trello_token: str = ""
     trello_board_id: str = ""

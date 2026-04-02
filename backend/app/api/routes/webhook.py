@@ -50,7 +50,24 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             )
         except Exception as e:
             print(f"ERROR Trello: {e}")
-
+    # Human escalation alert
+    if action.type == "escalate":
+        try:
+            async with httpx.AsyncClient() as alert_client:
+                await alert_client.post(
+                    "https://slack.com/api/chat.postMessage",
+                    headers={
+                        "Authorization": f"Bearer {settings.slack_bot_token}",
+                        "Content-Type": "application/json; charset=utf-8",
+                    },
+                    json={
+                        "channel": settings.slack_alert_channel,
+                        "text": f":rotating_light: *Human Escalation Required*\n\n*Client:* {sender_name} ({sender_phone})\n*Channel:* WhatsApp\n*Reason:* {action.payload.get('reason', 'Not specified')}\n*Urgency:* {action.payload.get('urgency', 'low').upper()}\n\n*Client Message:*\n>{message_text}\n\n_Please respond to the client on WhatsApp._"
+                    },
+                )
+                print(f"✅ Escalation alert sent to #agent-alerts")
+        except Exception as e:
+            print(f"ERROR Escalation alert: {e}")
     if not reply or not reply.strip():
         reply = "Hello! How can I assist you today?"
 
@@ -104,7 +121,24 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                     )
                 except Exception as e:
                     print(f"ERROR Trello: {e}")
-
+                # Human escalation alert
+            if action.type == "escalate":
+                try:
+                    async with httpx.AsyncClient() as alert_client:
+                        await alert_client.post(
+                            "https://slack.com/api/chat.postMessage",
+                            headers={
+                                "Authorization": f"Bearer {settings.slack_bot_token}",
+                                "Content-Type": "application/json; charset=utf-8",
+                            },
+                            json={
+                                "channel": settings.slack_alert_channel,
+                                "text": f":rotating_light: *Human Escalation Required*\n\n*Client:* {slack_user_id}\n*Channel:* Slack DM\n*Reason:* {action.payload.get('reason', 'Not specified')}\n*Urgency:* {action.payload.get('urgency', 'low').upper()}\n\n*Client Message:*\n>{message_text}\n\n_Please respond to the client directly._"
+                            },
+                        )
+                        print(f"✅ Escalation alert sent to #agent-alerts")
+                except Exception as e:
+                    print(f"ERROR Escalation alert: {e}")    
             await db.commit()
 
         except Exception as e:
