@@ -87,3 +87,53 @@ async def get_cards() -> list:
         )
         response.raise_for_status()
         return response.json()
+
+
+async def update_card_status(card_id: str, list_name: str) -> dict:
+    """Move card to different list (ToDo, In Progress, In Review, Done)."""
+
+    # Get all lists from board
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{TRELLO_BASE_URL}/boards/{settings.trello_board_id}/lists",
+            params=get_auth_params(),
+        )
+        lists = response.json()
+
+    # Find target list by name
+    target_list = next(
+        (l for l in lists if l['name'].lower() == list_name.lower()), None
+    )
+    if not target_list:
+        raise ValueError(f"List '{list_name}' not found on board")
+
+    # Move card
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"{TRELLO_BASE_URL}/cards/{card_id}",
+            params={**get_auth_params(), "idList": target_list['id']},
+        )
+        response.raise_for_status()
+        return {"success": True, "list": list_name}
+
+
+async def get_board_cards() -> list:
+    """Get all open cards with list info."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{TRELLO_BASE_URL}/boards/{settings.trello_board_id}/cards",
+            params={**get_auth_params(), "fields": "id,name,desc,idList,dateLastActivity,url"},
+        )
+        cards = response.json()
+
+        # Get lists for name mapping
+        lists_res = await client.get(
+            f"{TRELLO_BASE_URL}/boards/{settings.trello_board_id}/lists",
+            params=get_auth_params(),
+        )
+        lists = {l['id']: l['name'] for l in lists_res.json()}
+
+    return [
+        {**card, "list_name": lists.get(card['idList'], 'Unknown')}
+        for card in cards
+    ]

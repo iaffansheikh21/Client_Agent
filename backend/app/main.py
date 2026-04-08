@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.db.database import create_tables
-from app.api.routes import agent, clients, conversations, webhook
+from app.api.routes import agent, clients, conversations, webhook, tasks
 
 settings = get_settings()
 
@@ -40,6 +40,7 @@ app.include_router(agent.router)
 app.include_router(clients.router)
 app.include_router(conversations.router)
 app.include_router(webhook.router)
+app.include_router(tasks.router)
 
 
 @app.get("/health")
