@@ -79,3 +79,16 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+class AgentSettings(Base):
+    __tablename__ = "agent_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    agent_name: Mapped[str] = mapped_column(String(100), default="Alex")
+    company_name: Mapped[str] = mapped_column(String(255), default="Our Company")
+    services: Mapped[str] = mapped_column(Text, default="Software development and consulting")
+    tone: Mapped[str] = mapped_column(String(50), default="professional")
+    extra_instructions: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

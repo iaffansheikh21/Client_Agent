@@ -39,7 +39,13 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
         message=payload.message,
         conversation_history=history,
     )
-
+    
+    dry_run = getattr(payload, 'dry_run', False)
+    reply, action, tokens = await ai_service.process_message(
+        message=payload.message,
+        conversation_history=history,
+        dry_run=dry_run,
+    )
     # 5. Save messages to DB
     await memory_service.save_messages(
         db,

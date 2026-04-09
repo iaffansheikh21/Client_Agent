@@ -12,6 +12,7 @@ class IncomingMessage(BaseModel):
     sender_name: str | None = None        # e.g. "Ahmed" from WhatsApp profile
     sender_phone: str | None = None       # WhatsApp number
     sender_slack_id: str | None = None    # Slack user ID
+    dry_run: bool = False  # If True, no actual actions (Trello/Slack/email)
 
 
 # ── Agent response back to n8n ────────────────────────────────────────────────

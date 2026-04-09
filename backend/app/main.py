@@ -1,3 +1,63 @@
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from contextlib import asynccontextmanager
+
+# from app.config import get_settings
+# from app.db.database import create_tables
+# from app.api.routes import agent, clients, conversations, webhook, tasks
+# from app.api.routes import settings as settings_router
+# settings = get_settings()
+
+
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Startup: create DB tables
+#     await create_tables()
+#     print(f"✅ {settings.app_name} started — DB tables ready")
+#     yield
+#     # Shutdown
+#     print("👋 Shutting down")
+
+
+# app = FastAPI(
+#     title=settings.app_name,
+#     version="1.0.0",
+#     description="AI Agent backend",
+#     lifespan=lifespan,
+# )
+
+# # ── CORS (allow Next.js dev server) ──────────────────────────────────────────
+# # app.add_middleware(
+# #     CORSMiddleware,
+# #     allow_origins=["http://localhost:3000", "http://localhost:3001"],
+# #     allow_credentials=True,
+# #     allow_methods=["*"],
+# #     allow_headers=["*"],
+# # )
+# from fastapi.middleware.cors import CORSMiddleware
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"],
+#     allow_credentials=True,
+#     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+#     allow_headers=["*"],
+#     expose_headers=["*"],
+# )
+# # ── Routers ───────────────────────────────────────────────────────────────────
+# app.include_router(agent.router)
+# app.include_router(clients.router)
+# app.include_router(conversations.router)
+# app.include_router(webhook.router)
+# app.include_router(tasks.router)
+# app.include_router(settings_router.router)
+
+
+
+# @app.get("/health")
+# async def health():
+#     return {"status": "ok", "service": settings.app_name}
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -5,17 +65,16 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.db.database import create_tables
 from app.api.routes import agent, clients, conversations, webhook, tasks
+from app.api.routes import settings as settings_router
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create DB tables
     await create_tables()
     print(f"✅ {settings.app_name} started — DB tables ready")
     yield
-    # Shutdown
     print("👋 Shutting down")
 
 
@@ -26,21 +85,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS (allow Next.js dev server) ──────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(agent.router)
 app.include_router(clients.router)
 app.include_router(conversations.router)
 app.include_router(webhook.router)
 app.include_router(tasks.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/health")

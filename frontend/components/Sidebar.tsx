@@ -85,7 +85,6 @@ import { usePathname } from 'next/navigation';
 const links = [
   { href: '/', label: 'Overview', icon: '▦' },
   { href: '/conversations', label: 'Conversations', icon: '◈' },
-  { href: '/escalations', label: 'Escalations', icon: '⚡' },
   { href: '/tasks', label: 'Trello Tasks', icon: '◫' },
   { href: '/clients', label: 'Clients', icon: '◉' },
   { href: '/test-agent', label: 'Test Agent', icon: '◎' },
