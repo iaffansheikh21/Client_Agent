@@ -4,6 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.schemas import IncomingMessage, AgentResponse
 from app.services import ai_service, memory_service
+from app.config import get_settings
+settings = get_settings()
+
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -120,9 +123,19 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
                         task_type=act.payload.get("task_type", "support"),
                     )
                     print(f"✅ Trello card: {act.payload.get('title')}")
-                except Exception as e:
-                    print(f"ERROR Trello: {e}")
 
+                    # Email to client
+                    if client.email:
+                        await email_service.send_task_created_email(
+                            client_name=client.name,
+                            client_email=settings.alert_email,
+                            task_title=act.payload.get("title", "New Task"),
+                            task_description=act.payload.get("description", ""),
+                            task_priority=act.payload.get("priority", "medium"),
+                            trello_url=card.get("url", ""),
+                        )
+                except Exception as e:
+                    print(f"ERROR Trello/Email: {e}")
             elif act.type == "escalate":
                 try:
                     import httpx
