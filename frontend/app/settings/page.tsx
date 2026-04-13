@@ -241,7 +241,7 @@ export default function SettingsPage() {
               style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.6' }}
             />
             <p style={{ fontSize: '12px', color: 'var(--text2)', marginTop: '8px' }}>
-              Agent will use these when answering "what do you offer?"
+              Agent will use these when answering {"what do you offer?"}
             </p>
           </div>
 

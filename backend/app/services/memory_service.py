@@ -11,6 +11,7 @@ async def get_or_create_client(
     phone: str | None = None,
     slack_user_id: str | None = None,
     name: str = "Unknown",
+    email: str | None = None,
 ) -> Client:
     """Find existing client by id/phone/slack, or create new one."""
 
@@ -41,6 +42,7 @@ async def get_or_create_client(
         name=name,
         phone=phone,
         slack_user_id=slack_user_id,
+        email=email,
     )
     db.add(client)
     await db.flush()

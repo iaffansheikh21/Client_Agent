@@ -382,7 +382,7 @@ export default function TestAgentPage() {
                 {msg.content}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '6px', fontFamily: 'JetBrains Mono, monospace' }}>
-                {msg.timestamp.toLocaleTimeString()}
+                {msg.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
               </div>
             </div>
 
