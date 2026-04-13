@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_api_key: str
 
     # Agent personality
-    company_name: str = "Digital Solutions"
+    company_name: str = "DS Technologies Pvt Ltd"
     company_services: str = (
     "We provide end-to-end digital services including custom web development, "
     "UI/UX and graphic design, SEO (search engine optimization), mobile app development "

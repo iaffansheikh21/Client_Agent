@@ -1,39 +1,19 @@
 from openai import AsyncOpenAI
 from app.config import get_settings
 from app.models.schemas import AgentAction
+import json
+import re
+import random
 
 settings = get_settings()
-
 client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-
-def build_system_prompt() -> str:
-    s = get_settings()
-    return f"""You are {s.agent_name}, a professional AI assistant for {s.company_name}.
-
-Our services include: {s.company_services}
-
-Your responsibilities:
-1. Answer client queries about our services professionally and helpfully
-2. Create Trello tasks when a client reports a bug, requests a feature, or needs support work done
-3. Generate invoices when a client asks about billing or payment
-4. Escalate to a human agent when: the issue is complex, the client is angry, or you are not confident
-
-Communication style:
-- Be professional but friendly
-- Keep responses concise (3-5 sentences max for simple queries)
-- Always confirm before creating tasks or invoices
-
-When you need to take an action, use the provided tools.
-"""
-
 
 TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "create_trello_task",
-            "description": "Create a Trello task when client reports a bug, requests a feature, or needs support work.",
+            "name": "create_jira_task",
+            "description": "Create a Trello task when client reports a bug, requests a feature, or needs support work. Call this tool ONCE PER ISSUE. If there are multiple issues, call this tool multiple times with different titles.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -50,7 +30,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "create_invoice",
-            "description": "Generate a Stripe invoice when client asks about billing or payment.",
+            "description": "Generate invoice when client asks about billing or payment.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -78,57 +58,157 @@ TOOLS = [
     }
 ]
 
+IGNORE_PATTERNS = [
+    "thank you", "thanks", "ok", "okay", "great", "got it",
+    "sounds good", "perfect", "awesome", "noted", "sure",
+    "alright", "cool", "nice", "good", "appreciated",
+    "thx", "ty", "tnx", "👍", "great job", "well done",
+]
+
+POLITE_REPLIES = [
+    "You're welcome! Is there anything else I can help you with?",
+    "Happy to help! Let me know if you need anything else.",
+    "Glad I could assist! Feel free to reach out anytime.",
+    "Of course! Don't hesitate to contact us if you need further assistance.",
+]
+
+
+def is_casual_message(message: str) -> bool:
+    msg = message.lower().strip().rstrip("!.?")
+    for pattern in IGNORE_PATTERNS:
+        if msg == pattern:
+            return True
+        if msg.startswith(pattern + " ") or msg.startswith(pattern + ","):
+            return True
+    return False
+
 
 async def process_message(
     message: str,
     conversation_history: list[dict],
-) -> tuple[str, AgentAction, int]:
+    system_prompt: str | None = None,
+    dry_run: bool = False,
+) -> tuple[str, AgentAction, int, list[AgentAction]]:
+
+    # Casual message check — API call skip karo
+    if is_casual_message(message):
+        return random.choice(POLITE_REPLIES), AgentAction(type="none"), 0, []
+
+    if not system_prompt:
+        try:
+            from app.db.database import AsyncSessionLocal
+            from app.services import settings_service
+            async with AsyncSessionLocal() as db:
+                s = await settings_service.get_settings(db)
+                system_prompt = settings_service.build_system_prompt(s)
+        except Exception:
+            system_prompt = "You are a helpful AI assistant."
 
     messages = [
-        {"role": "system", "content": build_system_prompt()},
+        {"role": "system", "content": system_prompt},
         *conversation_history,
         {"role": "user", "content": message}
     ]
 
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=1024,
-        )
-    except Exception as e:
-        print(f"OpenAI ERROR: {e}")
-        return "I'm sorry, I'm having trouble processing your request right now. Please try again.", AgentAction(type="none"), 0
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        tools=TOOLS,
+        tool_choice="auto",
+        max_tokens=1024,
+        parallel_tool_calls=True,
+    )
 
     choice = response.choices[0]
     tokens = response.usage.total_tokens
-    action = AgentAction(type="none")
+    actions = []
     reply = ""
 
-    # Tool call
     if choice.finish_reason == "tool_calls":
-        tool_call = choice.message.tool_calls[0]
-        tool_name = tool_call.function.name
+        task_titles = []
 
-        import json
-        tool_input = json.loads(tool_call.function.arguments)
+        for tool_call in choice.message.tool_calls:
+            tool_name = tool_call.function.name
+            tool_input = json.loads(tool_call.function.arguments)
 
-        if tool_name == "create_jira_task":
-            action = AgentAction(type="create_task", payload=tool_input)
-            reply = f"I've created a support task: '{tool_input['title']}'. Our team will be in touch shortly."
+            if tool_name == "create_jira_task":
+                title = tool_input.get("title", "New Task")
+                if title in task_titles:
+                    continue
+                task_titles.append(title)
+                actions.append(AgentAction(
+                    type="none" if dry_run else "create_task",
+                    payload=tool_input
+                ))
 
-        elif tool_name == "create_invoice":
-            action = AgentAction(type="send_invoice", payload=tool_input)
-            reply = f"I'll send you an invoice for {tool_input['description']} (${tool_input['amount']:.2f})."
+            elif tool_name == "create_invoice":
+                actions.append(AgentAction(
+                    type="none" if dry_run else "send_invoice",
+                    payload=tool_input
+                ))
 
-        elif tool_name == "escalate_to_human":
-            action = AgentAction(type="escalate", payload=tool_input)
-            reply = "I'm connecting you with one of our team members who will help you better."
+            elif tool_name == "escalate_to_human":
+                actions.append(AgentAction(
+                    type="none" if dry_run else "escalate",
+                    payload=tool_input
+                ))
 
-    # Normal response
+        task_actions = [a for a in actions if a.type == "create_task"]
+        invoice_actions = [a for a in actions if a.type == "send_invoice"]
+        escalate_actions = [a for a in actions if a.type == "escalate"]
+
+        reply_parts = []
+
+        if task_actions:
+            if len(task_actions) == 1:
+                title = task_actions[0].payload.get("title", "Task")
+                reply_parts.append(f"I've created a support task: '{title}'. Our team will be in touch shortly.")
+            else:
+                titles = [a.payload.get("title", "Task") for a in task_actions]
+                tasks_list = "\n".join([f"• {t}" for t in titles])
+                reply_parts.append(f"I've created {len(task_actions)} separate tasks:\n{tasks_list}\nOur team will be in touch shortly.")
+
+        if invoice_actions:
+            desc = invoice_actions[0].payload.get("description", "")
+            amount = invoice_actions[0].payload.get("amount", 0)
+            reply_parts.append(f"Invoice generated for {desc} (${amount:.2f}).")
+
+        if escalate_actions:
+            reply_parts.append("I'm connecting you with one of our team members who will help you better.")
+
+        reply = " ".join(reply_parts)
+
+        if not reply:
+            reply = "I've processed your request. Our team will be in touch shortly."
+
+        if dry_run:
+            reply += " [DRY RUN — no actual actions taken]"
+
     else:
         reply = choice.message.content or "I'm sorry, I could not process your request."
 
-    return reply, action, tokens
+    primary_action = actions[0] if actions else AgentAction(type="none")
+    return reply, primary_action, tokens, actions
+
+
+async def extract_client_info(messages: list[dict]) -> dict:
+    """Extract name and email from conversation if mentioned."""
+    info = {"name": None, "email": None}
+
+    for msg in messages:
+        if msg["role"] == "user":
+            email_match = re.search(
+                r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+                msg["content"]
+            )
+            if email_match:
+                info["email"] = email_match.group()
+
+            name_match = re.search(
+                r"(?:my name is|i am|i'm|this is)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)",
+                msg["content"], re.IGNORECASE
+            )
+            if name_match:
+                info["name"] = name_match.group(1).title()
+
+    return info
