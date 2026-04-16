@@ -127,3 +127,79 @@ async def send_task_created_email(
         print(f"✅ Task email sent to {client_email}")
     except Exception as e:
         print(f"ERROR Task Email: {e}")
+
+async def send_task_status_email(
+    client_name: str,
+    client_email: str,
+    task_title: str,
+    new_status: str,
+    notification_text: str,
+):
+    """Send task status update email to client."""
+
+    status_color = {
+        "ToDo": "#888888",
+        "In Progress": "#FFA500",
+        "In Review": "#7c6fff",
+        "Done": "#4CAF50",
+    }.get(new_status, "#888888")
+
+    status_emoji = {
+        "ToDo": "📋",
+        "In Progress": "⚙️",
+        "In Review": "🔍",
+        "Done": "✅",
+    }.get(new_status, "📌")
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #1a1a2e; padding: 24px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: #7c6fff; margin: 0; font-size: 22px;">{status_emoji} Task Status Update</h1>
+            <p style="color: #888; margin: 8px 0 0; font-size: 14px;">DS Technologies (Pvt.) Limited</p>
+        </div>
+        <div style="background-color: #f9f9f9; padding: 28px; border: 1px solid #e0e0e0;">
+            <p style="color: #333; font-size: 15px; margin-top: 0;">Dear <strong>{client_name}</strong>,</p>
+            <p style="color: #555; font-size: 14px; line-height: 1.6;">
+                There is an update on your support task.
+            </p>
+            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #666; width: 120px;"><strong>Task:</strong></td>
+                        <td style="padding: 8px 0; color: #333; font-weight: 600;">{task_title}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #666;"><strong>New Status:</strong></td>
+                        <td style="padding: 8px 0;">
+                            <span style="background: {status_color}22; color: {status_color}; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;">
+                                {status_emoji} {new_status}
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <p style="color: #555; font-size: 14px; line-height: 1.6;">
+                {"Your issue has been resolved! Please let us know if everything is working correctly." if new_status == "Done" else "We will keep you updated as progress is made."}
+            </p>
+        </div>
+        <div style="background: #f0f0f0; padding: 16px 28px; border-radius: 0 0 8px 8px; text-align: center;">
+            <p style="margin: 0; color: #999; font-size: 12px;">
+                DS Technologies (Pvt.) Limited — Faisalabad, Pakistan<br>
+                <a href="https://digitalsolutions.com.pk" style="color: #7c6fff;">digitalsolutions.com.pk</a>
+            </p>
+        </div>
+    </div>
+    """
+
+    try:
+        params = {
+            "from": "DS Technologies <onboarding@resend.dev>",
+            "to": [settings.alert_email],
+            "reply_to": client_email,
+            "subject": f"{status_emoji} Task Update — {task_title} is now {new_status}",
+            "html": html_content,
+        }
+        resend.Emails.send(params)
+        print(f"✅ Status email sent for {task_title}")
+    except Exception as e:
+        print(f"ERROR Status Email: {e}")
