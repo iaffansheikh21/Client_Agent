@@ -18,6 +18,8 @@ async def create_card(
     description: str,
     priority: str = "medium",
     task_type: str = "bug",
+    client_id: str | None = None,
+    db=None,
 ) -> dict:
     """Create a Trello card in ToDo list."""
 
@@ -65,12 +67,26 @@ async def create_card(
         response.raise_for_status()
         card = response.json()
         print(f"✅ Trello card created: {card['shortUrl']}")
-        return {
+        card_data = {
             "id": card["id"],
             "name": card["name"],
             "url": card["shortUrl"],
             "list": "ToDo",
         }
+
+        # Save to DB if client_id provided
+        if client_id and db:
+            from app.db.models import TrelloCard, gen_uuid
+            db.add(TrelloCard(
+                id=gen_uuid(),
+                card_id=card["id"],
+                client_id=client_id,
+                title=title,
+                trello_url=card["shortUrl"],
+            ))
+            await db.flush()
+
+        return card_data
 
 
 async def get_cards() -> list:

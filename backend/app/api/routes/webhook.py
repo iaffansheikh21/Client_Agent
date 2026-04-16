@@ -26,7 +26,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     conversation = await memory_service.get_or_create_conversation(db, client_id=client.id, channel="whatsapp")
     history = await memory_service.get_history(db, conversation.id)
 
-    reply, action, _ = await ai_service.process_message(
+    reply, action, _, *_ = await ai_service.process_message(
         message=message_text,
         conversation_history=history
     )
@@ -47,10 +47,11 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 description=action.payload.get("description", ""),
                 priority=action.payload.get("priority", "medium"),
                 task_type=action.payload.get("task_type", "support"),
+                client_id=client.id,
+                db=db,
             )
         except Exception as e:
             print(f"ERROR Trello: {e}")
-    # Human escalation alert
     if action.type == "escalate":
         try:
             async with httpx.AsyncClient() as alert_client:
@@ -107,7 +108,7 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
 
             history = await memory_service.get_history(db, conversation.id)
 
-            reply, action, _ = await ai_service.process_message(
+            reply, action, _, *_ = await ai_service.process_message(
                 message=message_text,
                 conversation_history=history,
             )
@@ -128,6 +129,8 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                         description=action.payload.get("description", ""),
                         priority=action.payload.get("priority", "medium"),
                         task_type=action.payload.get("task_type", "support"),
+                        client_id=client.id,
+                        db=db,
                     )
                 except Exception as e:
                     print(f"ERROR Trello: {e}")
@@ -232,5 +235,159 @@ async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
         channel_id,
         thread_ts,  # ✅ pass thread info
     )
+
+    return {"ok": True}
+
+@router.head("/trello")
+async def trello_webhook_verify():
+    """Trello sends HEAD request to verify webhook URL."""
+    return Response(status_code=200)
+@router.post("/trello")
+async def trello_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """Receive Trello card update events."""
+    
+    # Trello sends HEAD request first for verification
+    if request.method == "HEAD":
+        return Response(status_code=200)
+    
+    try:
+        data = await request.json()
+    except:
+        return {"ok": True}
+
+    action = data.get("action", {})
+    action_type = action.get("type", "")
+    
+    # Only handle card moves (updateCard with listAfter)
+    if action_type != "updateCard":
+        return {"ok": True}
+    
+    action_data = action.get("data", {})
+    list_after = action_data.get("listAfter", {})
+    
+    if not list_after:
+        return {"ok": True}
+
+    card = action_data.get("card", {})
+    card_name = card.get("name", "")
+    new_list = list_after.get("name", "")
+    
+    print(f"DEBUG Trello: Card '{card_name}' moved to '{new_list}'")
+
+    # Find client from DB by matching recent task messages
+    # Search in messages for this card title
+    from sqlalchemy import select, or_
+    from app.db.models import Message, Conversation, Client
+    
+    result = await db.execute(
+        select(Message).where(
+            Message.role == "assistant",
+            Message.content.ilike(f"%{card_name[:30]}%")
+        ).order_by(Message.created_at.desc()).limit(5)
+    )
+    messages = result.scalars().all()
+    
+    client = None
+    for msg in messages:
+        conv_result = await db.execute(
+            select(Conversation).where(Conversation.id == msg.conversation_id)
+        )
+        conv = conv_result.scalar_one_or_none()
+        if conv:
+            client_result = await db.execute(
+                select(Client).where(Client.id == conv.client_id)
+            )
+            client = client_result.scalar_one_or_none()
+            if client:
+                break
+
+    if not client:
+        print(f"DEBUG: No client found for card '{card_name}'")
+        return {"ok": True}
+
+    # Build notification message
+    status_emoji = {
+        "ToDo": "📋",
+        "In Progress": "⚙️",
+        "In Review": "🔍",
+        "Done": "✅",
+    }
+    emoji = status_emoji.get(new_list, "📌")
+    
+    notification = f"{emoji} Update on your task *{card_name}*: Status changed to *{new_list}*."
+    
+    if new_list == "Done":
+        notification += " Your issue has been resolved! Please let us know if you need anything else."
+    elif new_list == "In Progress":
+        notification += " Our team is actively working on it."
+    elif new_list == "In Review":
+        notification += " Our team has completed the work and it's under review."
+
+    # Send via WhatsApp if phone exists
+    if client.phone:
+        try:
+            from app.config import get_settings as _get_settings
+            _settings = _get_settings()
+            import httpx
+            async with httpx.AsyncClient() as http_client:
+                await http_client.post(
+                    "https://api.twilio.com/2010-04-01/Accounts/"
+                    f"{_settings.twilio_account_sid}/Messages.json",
+                    auth=(_settings.twilio_account_sid, _settings.twilio_auth_token),
+                    data={
+                        "From": f"whatsapp:{_settings.twilio_whatsapp_number}",
+                        "To": f"whatsapp:{client.phone}",
+                        "Body": notification,
+                    },
+                )
+                print(f"✅ WhatsApp notification sent to {client.phone}")
+        except Exception as e:
+            print(f"ERROR WhatsApp notify: {e}")
+
+    # Send via Slack if slack_user_id exists
+    if client.slack_user_id:
+        try:
+            from app.config import get_settings as _get_settings
+            _settings = _get_settings()
+            import httpx
+            async with httpx.AsyncClient() as http_client:
+                # Open DM channel
+                dm_res = await http_client.post(
+                    "https://slack.com/api/conversations.open",
+                    headers={
+                        "Authorization": f"Bearer {_settings.slack_bot_token}",
+                        "Content-Type": "application/json; charset=utf-8",
+                    },
+                    json={"users": client.slack_user_id},
+                )
+                dm_data = dm_res.json()
+                dm_channel = dm_data.get("channel", {}).get("id")
+                
+                if dm_channel:
+                    await http_client.post(
+                        "https://slack.com/api/chat.postMessage",
+                        headers={
+                            "Authorization": f"Bearer {_settings.slack_bot_token}",
+                            "Content-Type": "application/json; charset=utf-8",
+                        },
+                        json={"channel": dm_channel, "text": notification},
+                    )
+                    print(f"✅ Slack notification sent to {client.slack_user_id}")
+        except Exception as e:
+            print(f"ERROR Slack notify: {e}")
+
+    # Send email if email exists
+    if client.email:
+        try:
+            from app.services.email_service import send_task_status_email
+            await send_task_status_email(
+                client_name=client.name,
+                client_email=client.email,
+                task_title=card_name,
+                new_status=new_list,
+                notification_text=notification,
+            )
+        except Exception as e:
+            print(f"ERROR Email notify: {e}")
 
     return {"ok": True}

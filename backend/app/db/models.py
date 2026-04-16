@@ -80,6 +80,19 @@ class Message(Base):
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
 
+class TrelloCard(Base):
+    __tablename__ = "trello_cards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    card_id: Mapped[str] = mapped_column(String(100), unique=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"))
+    title: Mapped[str] = mapped_column(String(500))
+    trello_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    client: Mapped["Client"] = relationship()
+
+
 class AgentSettings(Base):
     __tablename__ = "agent_settings"
 
