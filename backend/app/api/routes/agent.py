@@ -19,7 +19,7 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
         client_id=payload.client_id,
         phone=payload.sender_phone,
         slack_user_id=payload.sender_slack_id,
-        name=payload.sender_name or "Client",
+        name=payload.sender_name or "Unknown",
     )
 
     # 2. Get or create conversation
@@ -30,25 +30,39 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
     # 3. Load history
     history = await memory_service.get_history(db, conversation.id)
 
-     # 4. Run AI — now returns (reply, primary_action, tokens, all_actions)
+    # 4. Build conversation state
+    state = memory_service.build_conversation_state(history, client)
+
+    # 5. Build state-aware system prompt
+    from app.services import settings_service
+    agent_settings = await settings_service.get_settings(db)
+    system_prompt = settings_service.build_system_prompt(agent_settings, state=state)
+
+    # 6. Run AI
     result = await ai_service.process_message(
         message=payload.message,
         conversation_history=history,
+        system_prompt=system_prompt,
         dry_run=payload.dry_run,
     )
     reply, action, tokens = result[0], result[1], result[2]
     all_actions = result[3] if len(result) > 3 else [action]
 
-    # 5. Extract name/email
-    all_messages = history + [{"role": "user", "content": payload.message}]
-    client_info = await ai_service.extract_client_info(all_messages)
+    # 7. Update client record from state (name/email extracted from history)
+    if state["client_email"] and not client.email:
+        client.email = state["client_email"]
+    if state["client_name"] and client.name in ["Unknown", "Client"]:
+        client.name = state["client_name"]
 
-    if client_info["email"] and not client.email:
-        client.email = client_info["email"]
-    if client_info["name"] and client.name in ["Unknown", "Client"]:
-        client.name = client_info["name"]
+    # Also scan current message for email if still missing
+    if not client.email:
+        current_info = await ai_service.extract_client_info([{"role": "user", "content": payload.message}])
+        if current_info["email"]:
+            client.email = current_info["email"]
+        if current_info["name"] and client.name in ["Unknown", "Client"]:
+            client.name = current_info["name"]
 
-    # 6. Save messages
+    # 8. Save messages
     await memory_service.save_messages(
         db,
         conversation_id=conversation.id,
@@ -56,7 +70,7 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
         assistant_reply=reply,
     )
 
-    # 7. Handle ALL actions
+    # 9. Handle ALL actions
     if not payload.dry_run:
         from app.services import trello_service, email_service
         for act in all_actions:
@@ -67,6 +81,8 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
                         description=act.payload.get("description", ""),
                         priority=act.payload.get("priority", "medium"),
                         task_type=act.payload.get("task_type", "support"),
+                        client_id=client.id,
+                        db=db,
                     )
                     print(f"✅ Trello card: {act.payload.get('title')}")
 
@@ -74,7 +90,7 @@ async def chat(payload: IncomingMessage, db: AsyncSession = Depends(get_db)):
                     if client.email:
                         await email_service.send_task_created_email(
                             client_name=client.name,
-                            client_email=settings.alert_email,
+                            client_email=client.email,
                             task_title=act.payload.get("title", "New Task"),
                             task_description=act.payload.get("description", ""),
                             task_priority=act.payload.get("priority", "medium"),

@@ -118,13 +118,13 @@ async def send_task_created_email(
     try:
         params = {
             "from": "DS Technologies <onboarding@resend.dev>",
-            "to": [settings.alert_email],  # apni email
-            "reply_to": client_email,       # client ka email reply-to mein
-            "subject": f"✅ Task Created for {client_name} ({client_email})",
+            "to": [settings.alert_email],
+            "reply_to": client_email,
+            "subject": f"✅ [Task Created] {client_name} ({client_email})",
             "html": html_content,
         }
         resend.Emails.send(params)
-        print(f"✅ Task email sent to {client_email}")
+        print(f"✅ Task email sent (client: {client_email})")
     except Exception as e:
         print(f"ERROR Task Email: {e}")
 
@@ -200,6 +200,6 @@ async def send_task_status_email(
             "html": html_content,
         }
         resend.Emails.send(params)
-        print(f"✅ Status email sent for {task_title}")
+        print(f"✅ Status email sent (client: {client_email})")
     except Exception as e:
         print(f"ERROR Status Email: {e}")
