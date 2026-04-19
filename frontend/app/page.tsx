@@ -45,7 +45,7 @@ export default function HomePage() {
           OVERVIEW
         </div>
         <h1 style={{ fontSize: '36px', fontWeight: 800, letterSpacing: '-1px', color: 'var(--text)' }}>
-          Command Center
+          ClientFlow AI
         </h1>
       </div>
 

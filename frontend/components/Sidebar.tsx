@@ -26,14 +26,55 @@ export default function Sidebar() {
       padding: '24px 0',
     }}>
       {/* Logo */}
-      <div style={{ padding: '0 24px 32px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '11px', letterSpacing: '3px', color: 'var(--text2)', marginBottom: '6px' }}>
-          AI AGENT
-        </div>
-        <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent)', letterSpacing: '-0.5px' }}>
-          Dashboard
-        </div>
+      {/* Logo */}
+<div style={{ padding: '0 24px 32px', borderBottom: '1px solid var(--border)' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    
+    {/* CF Mark — Squircle with geometric flow */}
+    <div style={{
+      width: '44px', height: '44px', borderRadius: '14px', flexShrink: 0,
+      background: 'linear-gradient(135deg, #7c6fff 0%, #ff6f91 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        {/* C shape */}
+        <rect x="3" y="4" width="13" height="4" rx="2" fill="white" opacity="0.95"/>
+        <rect x="3" y="20" width="13" height="4" rx="2" fill="white" opacity="0.95"/>
+        <rect x="3" y="4" width="4" height="20" rx="2" fill="white" opacity="0.95"/>
+        {/* Flow arrow */}
+        <rect x="14" y="12" width="11" height="4" rx="2" fill="white" opacity="0.85"/>
+        {/* Dots */}
+        <circle cx="23" cy="6" r="2.5" fill="white" opacity="0.65"/>
+        <circle cx="23" cy="22" r="2.5" fill="white" opacity="0.65"/>
+      </svg>
+    </div>
+
+    {/* Wordmark */}
+    <div>
+      <div style={{
+        fontSize: '15px', fontWeight: 800, letterSpacing: '-0.5px',
+        lineHeight: 1.2, color: 'var(--text)',
+      }}>
+        ClientFlow{' '}
+        <span style={{
+          background: 'linear-gradient(135deg, #7c6fff, #ff6f91)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
+          AI
+        </span>
       </div>
+      <div style={{
+        fontSize: '9px', color: 'var(--text2)',
+        letterSpacing: '0.8px', marginTop: '3px',
+        textTransform: 'uppercase',
+      }}>
+        Client support, on autopilot.
+      </div>
+    </div>
+  </div>
+</div>
 
       {/* Nav */}
       <nav style={{ padding: '16px 12px', flex: 1 }}>
