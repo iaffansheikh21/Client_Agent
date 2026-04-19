@@ -93,12 +93,55 @@ async def get_history(
     )
     messages = result.scalars().all()
 
-    # Reverse to chronological order, exclude system messages
     return [
         {"role": msg.role.value, "content": msg.content}
         for msg in reversed(messages)
         if msg.role != MessageRole.system
     ]
+
+
+def build_conversation_state(history: list[dict], client) -> dict:
+    """Derive conversation state from history + client record."""
+    import re
+
+    has_greeted = len(history) > 0
+    client_name = client.name if client.name not in ["Unknown", "Client", "", None] else None
+    client_email = client.email
+
+    # Scan history for name/email if not in DB yet
+    if not client_name or not client_email:
+        for msg in history:
+            if msg["role"] == "user":
+                if not client_email:
+                    m = re.search(r'\b[\w.+-]+@[\w-]+\.[\w.]+\b', msg["content"])
+                    if m:
+                        client_email = m.group()
+                if not client_name:
+                    m = re.search(
+                        r"(?:my name is|i am|i'm|this is)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)",
+                        msg["content"], re.IGNORECASE
+                    )
+                    if m:
+                        client_name = m.group(1).title()
+
+    # Check if last assistant message was asking for confirmation on a task
+    awaiting_task_confirmation = False
+    if history:
+        last_assistant = next(
+            (m["content"] for m in reversed(history) if m["role"] == "assistant"), ""
+        )
+        confirmation_signals = ["shall i proceed", "should i create", "want me to create", "confirm", "go ahead"]
+        if any(s in last_assistant.lower() for s in confirmation_signals):
+            awaiting_task_confirmation = True
+
+    return {
+        "has_greeted": has_greeted,
+        "client_name": client_name,
+        "client_email": client_email,
+        "collected_name": client_name is not None,
+        "collected_email": client_email is not None,
+        "awaiting_task_confirmation": awaiting_task_confirmation,
+    }
 
 
 async def save_messages(
