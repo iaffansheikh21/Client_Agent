@@ -9,6 +9,7 @@ const links = [
   { href: '/clients', label: 'Clients', icon: '◉' },
   { href: '/test-agent', label: 'Test Agent', icon: '◎' },
   { href: '/settings', label: 'Settings', icon: '⊙' },
+  { href: '/analytics', label: 'Analytics', icon: '◬' },
 ];
 
 export default function Sidebar() {
