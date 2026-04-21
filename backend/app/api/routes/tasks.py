@@ -58,12 +58,19 @@ async def update_task_status(card_id: str, list_name: str, db: AsyncSession = De
                 if client.slack_user_id:
                     try:
                         async with httpx.AsyncClient() as http_client:
-                            await http_client.post(
-                                "https://slack.com/api/chat.postMessage",
+                            dm_res = await http_client.post(
+                                "https://slack.com/api/conversations.open",
                                 headers={"Authorization": f"Bearer {settings.slack_bot_token}", "Content-Type": "application/json"},
-                                json={"channel": client.slack_user_id, "text": msg},
+                                json={"users": client.slack_user_id},
                             )
-                        print(f"✅ Slack notification sent to {client.slack_user_id}")
+                            dm_channel = dm_res.json().get("channel", {}).get("id")
+                            if dm_channel:
+                                await http_client.post(
+                                    "https://slack.com/api/chat.postMessage",
+                                    headers={"Authorization": f"Bearer {settings.slack_bot_token}", "Content-Type": "application/json"},
+                                    json={"channel": dm_channel, "text": msg},
+                                )
+                                print(f"✅ Slack notification sent to {client.slack_user_id}")
                     except Exception as e:
                         print(f"ERROR Slack notify: {e}")
 

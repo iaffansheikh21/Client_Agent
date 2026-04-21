@@ -1,8 +1,17 @@
 import resend
+import re
 from app.config import get_settings
 
 settings = get_settings()
 resend.api_key = settings.resend_api_key
+
+
+def extract_valid_email(value: str) -> str | None:
+    """Extract valid email from string like 'Ahmed ahmed@test.com'"""
+    if not value:
+        return None
+    m = re.search(r'[\w.+-]+@[\w-]+\.[\w.]+', value)
+    return m.group() if m else None
 
 
 async def send_escalation_email(
@@ -116,15 +125,17 @@ async def send_task_created_email(
     """
 
     try:
+        clean_email = extract_valid_email(client_email)
         params = {
             "from": "DS Technologies <onboarding@resend.dev>",
             "to": [settings.alert_email],
-            "reply_to": client_email,
-            "subject": f"✅ [Task Created] {client_name} ({client_email})",
+            "subject": f"✅ [Task Created] {client_name} ({clean_email or client_email})",
             "html": html_content,
         }
+        if clean_email:
+            params["reply_to"] = clean_email
         resend.Emails.send(params)
-        print(f"✅ Task email sent (client: {client_email})")
+        print(f"✅ Task email sent (client: {clean_email or client_email})")
     except Exception as e:
         print(f"ERROR Task Email: {e}")
 
@@ -192,14 +203,16 @@ async def send_task_status_email(
     """
 
     try:
+        clean_email = extract_valid_email(client_email)
         params = {
             "from": "DS Technologies <onboarding@resend.dev>",
             "to": [settings.alert_email],
-            "reply_to": client_email,
             "subject": f"{status_emoji} Task Update — {task_title} is now {new_status}",
             "html": html_content,
         }
+        if clean_email:
+            params["reply_to"] = clean_email
         resend.Emails.send(params)
-        print(f"✅ Status email sent (client: {client_email})")
+        print(f"✅ Status email sent (client: {clean_email or client_email})")
     except Exception as e:
         print(f"ERROR Status Email: {e}")

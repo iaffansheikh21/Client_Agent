@@ -126,7 +126,7 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
             client = await memory_service.get_or_create_client(
                 db,
                 slack_user_id=slack_user_id,
-                name=f"Slack User {slack_user_id}",
+                name="Unknown",
             )
 
             conversation = await memory_service.get_or_create_conversation(
@@ -137,10 +137,29 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
 
             history = await memory_service.get_history(db, conversation.id)
 
+            state = memory_service.build_conversation_state(history, client)
+
+            from app.services import settings_service
+            agent_settings = await settings_service.get_settings(db)
+            system_prompt = settings_service.build_system_prompt(agent_settings, state=state)
+
             reply, action, _, *_ = await ai_service.process_message(
                 message=message_text,
                 conversation_history=history,
+                system_prompt=system_prompt,
             )
+
+            # Update client name/email from state
+            if state["client_email"] and not client.email:
+                client.email = state["client_email"]
+            if state["client_name"] and client.name in ["Unknown", "Client"]:
+                client.name = state["client_name"]
+            # Also scan current message
+            current_info = await ai_service.extract_client_info([{"role": "user", "content": message_text}])
+            if current_info["email"] and not client.email:
+                client.email = current_info["email"]
+            if current_info["name"] and client.name in ["Unknown", "Client"]:
+                client.name = current_info["name"]
 
             await memory_service.save_messages(
                 db,
@@ -151,9 +170,9 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
 
             # Trello Task
             if action.type == "create_task":
-                from app.services import trello_service
+                from app.services import trello_service, email_service
                 try:
-                    await trello_service.create_card(
+                    card = await trello_service.create_card(
                         title=action.payload.get("title", "New Task"),
                         description=action.payload.get("description", ""),
                         priority=action.payload.get("priority", "medium"),
@@ -161,9 +180,18 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                         client_id=client.id,
                         db=db,
                     )
+                    if client.email:
+                        await email_service.send_task_created_email(
+                            client_name=client.name,
+                            client_email=client.email,
+                            task_title=action.payload.get("title", "New Task"),
+                            task_description=action.payload.get("description", ""),
+                            task_priority=action.payload.get("priority", "medium"),
+                            trello_url=card.get("url", ""),
+                        )
                 except Exception as e:
                     print(f"ERROR Trello: {e}")
-                # Human escalation alert
+
             if action.type == "escalate":
                 try:
                     async with httpx.AsyncClient() as alert_client:
@@ -179,18 +207,18 @@ async def handle_slack_message(slack_user_id: str, message_text: str, channel_id
                             },
                         )
                         print(f"✅ Escalation alert sent to #agent-alerts")
-                        #Email Notification
                         from app.services import email_service
-                    await email_service.send_escalation_email(
-                    client_name=f"Slack User {slack_user_id}",
-                    client_contact=slack_user_id,
-                    channel="Slack",
-                    reason=action.payload.get("reason", "Not specified"),
-                    urgency=action.payload.get("urgency", "low"),
-                    original_message=message_text,
-                )
+                        await email_service.send_escalation_email(
+                            client_name=client.name,
+                            client_contact=slack_user_id,
+                            channel="Slack",
+                            reason=action.payload.get("reason", "Not specified"),
+                            urgency=action.payload.get("urgency", "low"),
+                            original_message=message_text,
+                        )
                 except Exception as e:
-                    print(f"ERROR Escalation alert: {e}")    
+                    print(f"ERROR Escalation alert: {e}")
+
             await db.commit()
 
         except Exception as e:
@@ -380,15 +408,25 @@ async def trello_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             _settings = _get_settings()
             import httpx
             async with httpx.AsyncClient() as http_client:
-                await http_client.post(
-                    "https://slack.com/api/chat.postMessage",
+                dm_res = await http_client.post(
+                    "https://slack.com/api/conversations.open",
                     headers={
                         "Authorization": f"Bearer {_settings.slack_bot_token}",
                         "Content-Type": "application/json; charset=utf-8",
                     },
-                    json={"channel": client.slack_user_id, "text": notification},
+                    json={"users": client.slack_user_id},
                 )
-                print(f"✅ Slack notification sent to {client.slack_user_id}")
+                dm_channel = dm_res.json().get("channel", {}).get("id")
+                if dm_channel:
+                    await http_client.post(
+                        "https://slack.com/api/chat.postMessage",
+                        headers={
+                            "Authorization": f"Bearer {_settings.slack_bot_token}",
+                            "Content-Type": "application/json; charset=utf-8",
+                        },
+                        json={"channel": dm_channel, "text": notification},
+                    )
+                    print(f"✅ Slack notification sent to {client.slack_user_id}")
         except Exception as e:
             print(f"ERROR Slack notify: {e}")
 
