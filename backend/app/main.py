@@ -6,6 +6,7 @@ from app.config import get_settings
 from app.db.database import create_tables
 from app.api.routes import agent, clients, conversations, webhook, tasks, analytics
 from app.api.routes import settings as settings_router
+from app.api.routes import auth
 
 settings = get_settings()
 
@@ -40,6 +41,7 @@ app.include_router(webhook.router)
 app.include_router(tasks.router)
 app.include_router(settings_router.router)
 app.include_router(analytics.router)
+app.include_router(auth.router)
 
 @app.get("/health")
 async def health():
