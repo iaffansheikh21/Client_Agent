@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*
+CREDENTIALS.txt
+hash_password.py
 
 # Docs
 README.md
