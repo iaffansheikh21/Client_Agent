@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 
 const links = [
-  { href: '/', label: 'Overview', icon: '▦' },
+  { href: '/dashboard', label: 'Overview', icon: '▦' },
   { href: '/conversations', label: 'Conversations', icon: '◈' },
   { href: '/tasks', label: 'Trello Tasks', icon: '◫' },
   { href: '/clients', label: 'Clients', icon: '◉' },
@@ -100,14 +101,21 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Status */}
+      {/* Status + Logout */}
       <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            width: '8px', height: '8px', borderRadius: '50%',
-            background: 'var(--green)', boxShadow: '0 0 8px var(--green)',
-          }} />
-          <span style={{ fontSize: '12px', color: 'var(--text2)' }}>Agent Online</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)' }} />
+            <span style={{ fontSize: '12px', color: 'var(--text2)' }}>Agent Online</span>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: '/' })}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '12px', padding: '4px 8px', borderRadius: '6px', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#ff6f91')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#666')}
+          >
+            Logout
+          </button>
         </div>
       </div>
     </aside>
